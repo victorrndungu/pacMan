@@ -3,7 +3,6 @@ import sys
 import random
 import math
 
-
 # Initialize Pygame
 pygame.init()
 
@@ -16,13 +15,12 @@ pygame.display.set_caption("ChewPacabra")
 BACKGROUND_COLOR = (30, 30, 30)
 TEXT_COLOR = (255, 255, 255)
 PACMAN_COLOR = (255, 255, 0)
-GHOST_COLOR = (255, 0, 0)
+GHOST_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 165, 0), (255, 20, 147)]
 DOT_COLOR = (255, 255, 255)
 WALL_COLOR = (0, 0, 128)
 POWERUP_COLOR = (255, 223, 0)
 EXIT_COLOR = (0, 255, 0)
 IMMUNITY_COLOR = (0, 255, 255)
-
 
 # Fonts
 font = pygame.font.Font(None, 36)
@@ -39,7 +37,7 @@ powerup_sound = pygame.mixer.Sound("assets/invincible.wav")
 # Game variables
 tile_size = 50
 pacman = {"x": 50, "y": 50, "radius": 15, "speed": 5, "chomp_open": True}
-ghosts = [{"x": 400, "y": 300, "speed": 3, "dx": random.choice([-1, 1]), "dy": random.choice([-1, 1])} for _ in range(5)]  # Added an extra ghost
+ghosts = [{"x": 400, "y": 300, "speed": 3, "dx": random.choice([-1, 1]), "dy": random.choice([-1, 1]), "color": GHOST_COLORS[i]} for i in range(5)]
 score = 0
 lives = 3
 game_over = False
@@ -61,7 +59,6 @@ maze = [
     [1, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
 ]
-
 
 # Helper functions
 def draw_maze():
@@ -123,7 +120,7 @@ def check_collisions():
     if immunity_time > pygame.time.get_ticks():
         return
     for ghost in ghosts:
-        distance = math.sqrt((pacman["x"] - ghost["x"]) ** 2 + (pacman["y"] - ghost["y"]) ** 2)
+        distance = math.sqrt((pacman["x"] - ghost["x"]) * 2 + (pacman["y"] - ghost["y"]) * 2)
         if distance < pacman["radius"] * 2:
             lives -= 1
             if lives <= 0:
@@ -143,21 +140,24 @@ def draw_pacman():
                     pacman["radius"])
 
 
-def draw_immunity_timer():
-    """Draw the immunity timer (if Pac-Man has a power-up)."""
-    if immunity_time > pygame.time.get_ticks():
-        pygame.draw.circle(screen, IMMUNITY_COLOR,
-                           (pacman["x"], pacman["y"]), pacman["radius"] + 5, 5)
+def draw_ghost(ghost):
+    """Draw a ghost with eyes and wavy bottom."""
+    ghost_x, ghost_y = int(ghost["x"]), int(ghost["y"])
+    # Ghost body
+    pygame.draw.ellipse(screen, ghost["color"], (ghost_x - 15, ghost_y - 20, 30, 40))
+    # Wavy bottom
+    for i in range(3):
+        pygame.draw.circle(screen, ghost["color"], (ghost_x - 10 + i * 10, ghost_y + 20), 7)
+    # Eyes
+    pygame.draw.circle(screen, (255, 255, 255), (ghost_x - 5, ghost_y - 10), 5)
+    pygame.draw.circle(screen, (255, 255, 255), (ghost_x + 5, ghost_y - 10), 5)
+    # Pupils
+    pygame.draw.circle(screen, (0, 0, 0), (ghost_x - 5 + ghost["dx"] * 2, ghost_y - 10), 2)
+    pygame.draw.circle(screen, (0, 0, 0), (ghost_x + 5 + ghost["dx"] * 2, ghost_y - 10), 2)
 
 
-def check_win_condition():
-    """Check if Pac-Man has reached the exit."""
-    tile_x, tile_y = int(pacman["x"] // tile_size), int(pacman["y"] // tile_size)
-    return maze[tile_y][tile_x] == 4
-
-
-# Game loop
-pygame.mixer.music.play(-1)  # Loop background music
+# Main game loop
+clock = pygame.time.Clock()
 while True:
     screen.fill(BACKGROUND_COLOR)
 
@@ -165,25 +165,6 @@ while True:
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
-
-    if game_over:
-        game_over_text = large_font.render("GAME OVER", True, TEXT_COLOR)
-        screen.blit(game_over_text, (width // 2 - 150, height // 2 - 36))
-        pygame.display.flip()
-        continue
-
-    if level_complete:
-        level_complete_text = large_font.render("LEVEL COMPLETE!", True, TEXT_COLOR)
-        screen.blit(level_complete_text, (width // 2 - 230, height // 2 - 36))
-        pygame.display.flip()
-        pygame.time.delay(2000)
-        level_complete = False
-        current_level += 1  # Proceed to the next level
-
-    if check_win_condition():
-        level_complete = True
-        pygame.mixer.music.stop()
-        level_complete_sound.play()
 
     keys = pygame.key.get_pressed()
     if keys[pygame.K_LEFT] and can_move(pacman["x"] - pacman["speed"], pacman["y"]):
@@ -195,22 +176,31 @@ while True:
     if keys[pygame.K_DOWN] and can_move(pacman["x"], pacman["y"] + pacman["speed"]):
         pacman["y"] += pacman["speed"]
 
+    # Update game state
     move_ghosts()
     eat_dot()
     check_collisions()
+
+    # Draw everything
     draw_maze()
     draw_pacman()
-    draw_immunity_timer()
-
-    # Draw the score and lives
-    score_text = font.render(f"Score: {score}", True, TEXT_COLOR)
-    screen.blit(score_text, (10, 10))
-    lives_text = font.render(f"Lives: {lives}", True, TEXT_COLOR)
-    screen.blit(lives_text, (10, 40))
-
-    # Draw ghosts
     for ghost in ghosts:
-        pygame.draw.circle(screen, GHOST_COLOR, (int(ghost["x"]), int(ghost["y"])), 15)
+        draw_ghost(ghost)
+
+    # Display score and lives
+    score_text = font.render(f"Score: {score}", True, TEXT_COLOR)
+    lives_text = font.render(f"Lives: {lives}", True, TEXT_COLOR)
+    screen.blit(score_text, (10, 10))
+    screen.blit(lives_text, (10, 50))
+
+    # Check for game over
+    if game_over:
+        game_over_text = large_font.render("Game Over", True, TEXT_COLOR)
+        screen.blit(game_over_text, (width // 2 - game_over_text.get_width() // 2, height // 2))
+        pygame.display.flip()
+        pygame.time.wait(3000)
+        pygame.quit()
+        sys.exit()
 
     pygame.display.flip()
-    pygame.time.Clock().tick(15)
+    clock.tick(60)
